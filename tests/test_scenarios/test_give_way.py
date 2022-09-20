@@ -29,7 +29,7 @@ class TestGiveWay(unittest.TestCase):
     def test_heuristic(self):
         self.setup_env(n_agents=1)
         all_done = torch.full((self.n_envs,), False)
-        obs = self.env.reset()
+        obs, info = self.env.reset()
         while not all_done.all():
             obs_agent = obs[0]
             if (obs[1][:, :1] < 0).all():

@@ -38,7 +38,7 @@ class TestDropout(unittest.TestCase):
         for n_agents in [1, 5, 10, 20]:
             self.setup_env(n_agents=n_agents, num_envs=1)
 
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             total_rew = torch.zeros(self.env.num_envs)
 
             current_min = float("inf")
@@ -86,7 +86,7 @@ class TestDropout(unittest.TestCase):
         for n_agents in [1, 5, 10]:
             self.setup_env(n_agents=n_agents)
             for i in range(self.n_agents):
-                obs = self.env.reset()
+                obs, info = self.env.reset()
                 total_rew = torch.zeros(self.env.num_envs)
                 for _ in range(50):
                     obs_agent = obs[i]
@@ -129,7 +129,7 @@ class TestDropout(unittest.TestCase):
         rewards = []
         for n_agents in [5, 10, 50]:
             self.setup_env(n_agents=n_agents, energy_coeff=energy_coeff)
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             total_rew = torch.zeros(self.env.num_envs)
             for _ in range(50):
                 actions = []

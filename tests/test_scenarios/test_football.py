@@ -35,7 +35,7 @@ class TestFootball(unittest.TestCase):
             dense_reward_ratio=0,
         )
         all_done = torch.full((self.n_envs,), False)
-        obs = self.env.reset()
+        obs, info = self.env.reset()
         total_rew = torch.zeros(self.env.num_envs, n_agents)
         with tqdm(total=self.n_envs) as pbar:
             while not all_done.all():

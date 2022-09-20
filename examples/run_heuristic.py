@@ -43,7 +43,7 @@ def run_heuristic(
     frame_list = []  # For creating a gif
     init_time = time.time()
     step = 0
-    obs = env.reset()
+    obs, info = env.reset()
     total_reward = 0
     for s in range(n_steps):
         step += 1

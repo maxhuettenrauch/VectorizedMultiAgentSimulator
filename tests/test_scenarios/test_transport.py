@@ -33,7 +33,7 @@ class TestTransport(unittest.TestCase):
         self.setup_env(n_agents=1)
 
         for _ in range(10):
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             for _ in range(100):
                 obs_agent = obs[0]
                 self.assertTrue(
@@ -60,7 +60,7 @@ class TestTransport(unittest.TestCase):
             self.setup_env(n_agents=n_agents, random_package_pos_on_line=False)
             policy = transport.HeuristicPolicy(self.continuous_actions)
 
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             rews = None
 
             for _ in range(100):

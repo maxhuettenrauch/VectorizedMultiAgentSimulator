@@ -33,7 +33,7 @@ class TestBalance(unittest.TestCase):
             self.setup_env(n_agents=n_agents, random_package_pos_on_line=False)
             policy = balance.HeuristicPolicy(self.continuous_actions)
 
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             rews = None
 
             for _ in range(100):

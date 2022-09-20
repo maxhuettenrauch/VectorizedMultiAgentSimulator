@@ -32,7 +32,7 @@ class TestPassage(unittest.TestCase):
         for _ in range(1):
             self.setup_env(n_passages=1, shared_reward=True)
 
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             agent_switched = torch.full((5, self.n_envs), False)
             all_done = torch.full((self.n_envs,), False)
             while not all_done.all():

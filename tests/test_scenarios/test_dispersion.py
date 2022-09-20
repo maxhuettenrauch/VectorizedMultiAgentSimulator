@@ -37,7 +37,7 @@ class TestDispersion(unittest.TestCase):
                 n_agents=n_agents, share_reward=False, penalise_by_time=False
             )
             all_done = torch.full((self.n_envs,), False)
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             total_rew = torch.zeros(self.env.num_envs, n_agents)
             while not all_done.all():
                 actions = []
@@ -74,7 +74,7 @@ class TestDispersion(unittest.TestCase):
         for n_agents in [1, 5, 10, 20]:
             self.setup_env(n_agents=n_agents, share_reward=True, penalise_by_time=False)
             all_done = torch.full((self.n_envs,), False)
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             total_rew = torch.zeros(self.env.num_envs, n_agents)
             while not all_done.all():
                 actions = []

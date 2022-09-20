@@ -31,7 +31,7 @@ class TestReverseTransport(unittest.TestCase):
     def test_heuristic(self):
         for n_agents in [4, 5]:
             self.setup_env(n_agents=n_agents)
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             all_done = torch.full((self.n_envs,), False)
             rew = torch.full((self.n_envs,), float("-inf"))
             while not all_done.all():

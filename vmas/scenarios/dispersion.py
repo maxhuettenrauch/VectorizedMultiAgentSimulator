@@ -148,6 +148,11 @@ class Scenario(BaseScenario):
             dim=-1,
         )
 
+    def info(self, agent: Agent):
+        info_dict = {'pos': agent.state.pos,
+                     'vel': agent.state.vel}
+        return info_dict
+
 
 if __name__ == "__main__":
     render_interactively(

@@ -30,7 +30,7 @@ class TestFlocking(unittest.TestCase):
             self.setup_env(n_agents=n_agents, random_package_pos_on_line=False)
             policy = flocking.HeuristicPolicy(True)
 
-            obs = self.env.reset()
+            obs, info = self.env.reset()
             rews = None
 
             for _ in range(500):
