@@ -162,8 +162,9 @@ class Environment(TorchVectorizedObject):
         dones = self.scenario.done().clone()
 
         self.steps += 1
-        if self.max_steps is not None:
-            dones += self.steps >= self.max_steps
+        # if self.max_steps is not None:
+        #     dones += self.steps >= self.max_steps
+        truncateds = self.steps >= self.max_steps
 
         # print("\nStep results in unwrapped environment")
         # print(
@@ -181,7 +182,7 @@ class Environment(TorchVectorizedObject):
         # )
         # print(f"Dones len (n_envs): {len(dones)}, dones[0] (done env 0): {dones[0]}")
         # print(f"Info len (n_agents): {len(infos)}, info[0] (infos agent 0): {infos[0]}")
-        return obs, rewards, dones, infos
+        return obs, rewards, dones, truncateds, infos
 
     def get_agent_action_size(self, agent: Agent):
         return (

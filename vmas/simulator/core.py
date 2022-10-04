@@ -981,6 +981,8 @@ class World(TorchVectorizedObject):
             [1.0, 0.0], dtype=torch.float32, device=self.device
         ).repeat(self._batch_dim, 1)
 
+        self.time_step = torch.zeros(self.batch_dim, dtype=torch.float32, device=self.device)
+
     def add_agent(self, agent: Agent):
         """Only way to add agents to the world"""
         agent.batch_dim = self._batch_dim
@@ -1009,6 +1011,11 @@ class World(TorchVectorizedObject):
             )
 
     def reset(self, env_index: int):
+        if env_index is None:
+            self.time_step = torch.zeros(self.batch_dim, dtype=torch.float32, device=self.device)
+        else:
+            self.time_step[env_index] = 0
+
         for e in self.entities:
             e._reset(env_index)
 
@@ -1424,6 +1431,8 @@ class World(TorchVectorizedObject):
         if self._dim_c > 0:
             for agent in self._agents:
                 self._update_comm_state(agent)
+
+        self.time_step += 1
 
     # gather agent action forces
     def _apply_action_force(self, entity: Entity, index: int):
