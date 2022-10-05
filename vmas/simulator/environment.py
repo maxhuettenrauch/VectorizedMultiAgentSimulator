@@ -736,7 +736,7 @@ class GymWrapper(gym.Env):
 
     def step(self, action):
         action = self._action_list_to_tensor(action)
-        obs, rews, done, info = self._env.step(action)
+        obs, rews, done, truncated, info = self._env.step(action)
         done = done[0].item()
         for i in range(self._env.n_agents):
             obs[i] = obs[i][0]
