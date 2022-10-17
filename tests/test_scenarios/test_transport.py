@@ -24,6 +24,7 @@ class TestTransport(unittest.TestCase):
             num_envs=self.n_envs,
             device="cpu",
             continuous_actions=self.continuous_actions,
+            max_steps=200,
             # Environment specific variables
             **kwargs
         )
@@ -74,7 +75,7 @@ class TestTransport(unittest.TestCase):
 
                     actions.append(action_agent)
 
-                obs, new_rews, dones, _ = self.env.step(actions)
+                obs, new_rews, dones, truncateds, _ = self.env.step(actions)
 
                 if rews is not None:
                     for i in range(self.n_agents):

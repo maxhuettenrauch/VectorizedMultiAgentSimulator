@@ -36,6 +36,7 @@ def run_heuristic(
         device=device,
         continuous_actions=True,
         wrapper=None,
+        max_steps=1000,
         # Environment specific variables
         **env_kwargs,
     )
@@ -50,7 +51,7 @@ def run_heuristic(
         actions = [None] * len(obs)
         for i in range(len(obs)):
             actions[i] = policy.compute_action(obs[i], u_range=env.agents[i].u_range)
-        obs, rews, dones, info = env.step(actions)
+        obs, rews, dones, truncateds, info = env.step(actions)
         rewards = torch.stack(rews, dim=1)
         global_reward = rewards.mean(dim=1)
         mean_global_reward = global_reward.mean(dim=0)
@@ -95,7 +96,7 @@ if __name__ == "__main__":
         scenario_name="transport",
         heuristic=TransportHeuristic,
         n_envs=300,
-        n_steps=200,
+        n_steps=1000,
         render=True,
         save=False,
     )

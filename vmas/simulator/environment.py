@@ -741,7 +741,7 @@ class GymWrapper(gym.Env):
         for i in range(self._env.n_agents):
             obs[i] = obs[i][0]
             rews[i] = rews[i][0].item()
-        return obs, rews, done, info
+        return obs, rews, done, truncated, info
 
     def reset(
         self,
@@ -753,7 +753,10 @@ class GymWrapper(gym.Env):
         obs = self._env.reset_at(index=0)
         for i in range(self._env.n_agents):
             obs[i] = obs[i]
-        return obs
+        if return_info:
+            return obs, {}
+        else:
+            return obs
 
     def render(
         self,
