@@ -37,8 +37,8 @@ class InteractiveEnv:
         # hard-coded keyboard events
         self.current_agent_index = 0
         self.current_agent_index2 = 1
-        self.n_agents = self.env.unwrapped().n_agents
-        self.continuous = self.env.unwrapped().continuous_actions
+        self.n_agents = self.env.unwrapped.n_agents
+        self.continuous = self.env.unwrapped.continuous_actions
         self.reset = False
         self.keys = np.array([0.0, 0.0, 0.0, 0.0])  # up, down, left, right
         self.keys2 = np.array([0.0, 0.0, 0.0, 0.0])  # up, down, left, right
@@ -52,8 +52,8 @@ class InteractiveEnv:
 
         self.env.render()
         self._init_text()
-        self.env.unwrapped().viewer.window.on_key_press = self._key_press
-        self.env.unwrapped().viewer.window.on_key_release = self._key_release
+        self.env.unwrapped.viewer.window.on_key_press = self._key_press
+        self.env.unwrapped.viewer.window.on_key_release = self._key_release
 
         self._cycle()
 
@@ -78,7 +78,7 @@ class InteractiveEnv:
             action_list[self.current_agent_index] = self.u
             if self.n_agents > 1 and self.control_two_agents:
                 action_list[self.current_agent_index2] = self.u2
-            obs, rew, done, info = self.env.step(action_list)
+            obs, rew, done, truncated, info = self.env.step(action_list)
 
             obs[self.current_agent_index] = np.around(
                 obs[self.current_agent_index].cpu().tolist(), decimals=2
@@ -99,30 +99,30 @@ class InteractiveEnv:
             message = f"Done: {done}"
             self._write_values(self.text_idx + 4, message)
 
-            message = f"Selected: {self.env.unwrapped().agents[self.current_agent_index].name}"
+            message = f"Selected: {self.env.unwrapped.agents[self.current_agent_index].name}"
             self._write_values(self.text_idx + 5, message)
 
             self.env.render()
 
-            if done:
+            if done or truncated:
                 self.reset = True
 
     def _init_text(self):
         from vmas.simulator import rendering
 
         try:
-            self.text_idx = len(self.env.unwrapped().viewer.text_lines)
+            self.text_idx = len(self.env.unwrapped.viewer.text_lines)
         except AttributeError:
             self.text_idx = 0
 
         for i in range(N_TEXT_LINES_INTERACTIVE):
             text_line = rendering.TextLine(
-                self.env.unwrapped().viewer.window, self.text_idx + i
+                self.env.unwrapped.viewer.window, self.text_idx + i
             )
-            self.env.unwrapped().viewer.text_lines.append(text_line)
+            self.env.unwrapped.viewer.text_lines.append(text_line)
 
     def _write_values(self, index: int, message: str, font_size: int = 15):
-        self.env.unwrapped().viewer.text_lines[index].set_text(
+        self.env.unwrapped.viewer.text_lines[index].set_text(
             message, font_size=font_size
         )
 
@@ -130,7 +130,7 @@ class InteractiveEnv:
     def _key_press(self, k, mod):
         from pyglet.window import key
 
-        agent_range = self.env.unwrapped().agents[self.current_agent_index].u_range
+        agent_range = self.env.unwrapped.agents[self.current_agent_index].u_range
 
         u = self.u
         u2 = self.u2
@@ -158,7 +158,7 @@ class InteractiveEnv:
 
         if self.control_two_agents:
             agent2_range = (
-                self.env.unwrapped().agents[self.current_agent_index2].u_range
+                self.env.unwrapped.agents[self.current_agent_index2].u_range
             )
             if k == key.A:
                 self.keys2[0] = agent2_range

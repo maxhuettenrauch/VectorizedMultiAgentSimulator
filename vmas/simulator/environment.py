@@ -731,6 +731,13 @@ class GymWrapper(gym.Env):
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space
 
+    def __getattr__(self, name):
+        """Returns an attribute with ``name``, unless ``name`` starts with an underscore."""
+        if name.startswith("_"):
+            raise AttributeError(f"accessing private attribute '{name}' is prohibited")
+        return getattr(self._env, name)
+
+    @property
     def unwrapped(self) -> Environment:
         return self._env
 
