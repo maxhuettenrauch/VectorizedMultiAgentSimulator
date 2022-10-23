@@ -31,6 +31,7 @@ def use_vmas_env(render: bool = False, save_render: bool = False):
         device=device,
         continuous_actions=continuous_actions,
         wrapper=wrapper,
+        max_steps=500,
         # Environment specific variables
         n_agents=n_agents,
     )

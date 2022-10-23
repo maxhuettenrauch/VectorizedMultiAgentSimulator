@@ -72,6 +72,14 @@ class Scenario(BaseScenario):
         )
         world.add_landmark(floor)
 
+        self.pos_rew = torch.zeros(
+            world.batch_dim, device=world.device, dtype=torch.float32
+        )
+
+        self.ground_rew = torch.zeros(
+            world.batch_dim, device=world.device, dtype=torch.float32
+        )
+
         return world
 
     def reset_world_at(self, env_index: int = None):

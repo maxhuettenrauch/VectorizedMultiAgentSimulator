@@ -561,7 +561,7 @@ def get_rllib_env_wrapper():
             return self._env
 
         def vector_reset(self) -> List[EnvObsType]:
-            obs = self._env.reset()
+            obs, info = self._env.reset()
             return self._tensor_to_list(obs, self.num_envs)
 
         def reset_at(self, index: Optional[int] = None) -> EnvObsType:
@@ -574,9 +574,10 @@ def get_rllib_env_wrapper():
         ) -> Tuple[List[EnvObsType], List[float], List[bool], List[EnvInfoDict]]:
             # saved_actions = actions
             actions = self._action_list_to_tensor(actions)
-            obs, rews, dones, infos = self._env.step(actions)
+            obs, rews, dones, truncated, infos = self._env.step(actions)
 
-            dones = dones.tolist()
+            dones_or_truncated = torch.logical_or(dones, truncated)
+            dones = dones_or_truncated.tolist()
 
             total_rews = []
             total_infos = []
