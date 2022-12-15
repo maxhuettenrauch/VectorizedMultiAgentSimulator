@@ -307,4 +307,4 @@ class Scenario(BaseScenario):
 
 
 if __name__ == "__main__":
-    render_interactively("passage", n_passages=1, shared_reward=False)
+    render_interactively("passage", n_passages=1, shared_reward=False, max_steps=200)
