@@ -170,10 +170,9 @@ class Environment(TorchVectorizedObject):
             infos.append(self.scenario.info(agent))
 
         self.steps += 1
-        dones = self.done()
+        dones, truncateds = self.done()
         # if self.max_steps is not None:
         #     dones += self.steps >= self.max_steps
-        truncateds = self.steps >= self.max_steps
 
         # print("\nStep results in unwrapped environment")
         # print(
@@ -195,9 +194,10 @@ class Environment(TorchVectorizedObject):
 
     def done(self):
         dones = self.scenario.done()
+        truncateds = torch.zeros_like(dones, dtype=bool)
         if self.max_steps is not None:
-            dones += self.steps >= self.max_steps
-        return dones
+            truncateds = self.steps >= self.max_steps
+        return dones, truncateds
 
     def get_agent_action_size(self, agent: Agent):
         return (

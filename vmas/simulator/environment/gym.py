@@ -25,6 +25,7 @@ class GymWrapper(gym.Env):
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space
 
+    @property
     def unwrapped(self) -> Environment:
         return self._env
 
@@ -34,12 +35,12 @@ class GymWrapper(gym.Env):
 
     def step(self, action):
         action = self._action_list_to_tensor(action)
-        obs, rews, done, info = self._env.step(action)
+        obs, rews, done, truncated, info = self._env.step(action)
         done = done[0].item()
         for i in range(self._env.n_agents):
             obs[i] = obs[i][0]
             rews[i] = rews[i][0].item()
-        return obs, rews, done, info
+        return obs, rews, done, truncated, info
 
     def reset(
         self,
@@ -52,8 +53,11 @@ class GymWrapper(gym.Env):
             self._env.seed(seed)
         obs = self._env.reset_at(index=0)
         for i in range(self._env.n_agents):
-            obs[i] = obs[i]
-        return obs
+            obs[i] = obs[i][0]  # Why [0]?
+        if return_info:
+            return obs, {}
+        else:
+            return obs
 
     def render(
         self,
