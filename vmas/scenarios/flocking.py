@@ -1,16 +1,17 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
 from typing import Dict, Callable
 
 import torch
 from torch import Tensor
+
 from vmas import render_interactively
 from vmas.simulator.core import Agent, Landmark, Sphere, World, Entity
 from vmas.simulator.heuristic_policy import BaseHeuristicPolicy
 from vmas.simulator.scenario import BaseScenario
 from vmas.simulator.sensors import Lidar
-from vmas.simulator.utils import Color, X, Y
+from vmas.simulator.utils import Color, X, Y, ScenarioUtils
 
 
 class Scenario(BaseScenario):
@@ -60,41 +61,26 @@ class Scenario(BaseScenario):
         )
         world.add_landmark(self._target)
 
+        self.collision_rew = torch.zeros(batch_dim, device=device)
+        self.velocity_rew = self.collision_rew.clone()
+        self.separation_rew = self.collision_rew.clone()
+        self.cohesion_rew = self.collision_rew.clone()
+
         return world
 
     def reset_world_at(self, env_index: int = None):
-        occupied_positions = []
-        for entity in self.obstacles + self.world.agents:
-            pos = None
-            while True:
-                proposed_pos = torch.empty(
-                    (1, self.world.dim_p)
-                    if env_index is not None
-                    else (self.world.batch_dim, self.world.dim_p),
-                    device=self.world.device,
-                    dtype=torch.float32,
-                ).uniform_(-1.0, 1.0)
-                if pos is None:
-                    pos = proposed_pos
-                if len(occupied_positions) == 0:
-                    break
-
-                overlaps = [
-                    torch.linalg.norm(pos - o, dim=1) < self._min_dist_between_entities
-                    for o in occupied_positions
-                ]
-                overlaps = torch.any(torch.stack(overlaps, dim=-1), dim=-1)
-                if torch.any(overlaps, dim=0):
-                    pos[overlaps] = proposed_pos[overlaps]
-                else:
-                    break
-
-            occupied_positions.append(pos)
-            entity.set_pos(pos, batch_index=env_index)
+        ScenarioUtils.spawn_entities_randomly(
+            self.obstacles + self.world.agents,
+            self.world,
+            env_index,
+            self._min_dist_between_entities,
+            x_bounds=(-1, 1),
+            y_bounds=(-1, 1),
+        )
 
     def reward(self, agent: Agent):
         # Avoid collisions with each other
-        self.collision_rew = torch.zeros(self.world.batch_dim, device=self.world.device)
+        self.collision_rew[:] = 0
         for a in self.world.agents:
             if a != agent:
                 self.collision_rew[self.world.is_overlapping(a, agent)] -= 1.0
@@ -131,16 +117,14 @@ class Scenario(BaseScenario):
         )
 
     def info(self, agent: Agent) -> Dict[str, Tensor]:
-        try:
-            info = {
-                "collision_rew": self.collision_rew,
-                "velocity_rew": self.velocity_rew,
-                "separation_rew": self.separation_rew,
-                "cohesion_rew": self.cohesion_rew,
-            }
-        # When reset is called before reward()
-        except AttributeError:
-            info = {}
+
+        info = {
+            "collision_rew": self.collision_rew,
+            "velocity_rew": self.velocity_rew,
+            "separation_rew": self.separation_rew,
+            "cohesion_rew": self.cohesion_rew,
+        }
+
         return info
 
 
@@ -188,4 +172,4 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 
 
 if __name__ == "__main__":
-    render_interactively("flocking", n_agents=10)
+    render_interactively(__file__, control_two_agents=True)

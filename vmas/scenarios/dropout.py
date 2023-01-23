@@ -1,4 +1,4 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
 import math
@@ -37,6 +37,9 @@ class Scenario(BaseScenario):
             color=Color.GREEN,
         )
         world.add_landmark(goal)
+
+        self.pos_rew = torch.zeros(batch_dim, device=device)
+        self.energy_rew = self.pos_rew.clone()
 
         return world
 
@@ -99,7 +102,7 @@ class Scenario(BaseScenario):
                 dim=-1,
             )
 
-        self.pos_rew = torch.zeros(self.world.batch_dim, device=self.world.device)
+        self.pos_rew[:] = 0
         self.pos_rew[self.any_eaten * ~self.world.landmarks[0].eaten] = 1
 
         if is_last:
@@ -133,11 +136,7 @@ class Scenario(BaseScenario):
         )
 
     def info(self, agent: Agent) -> Dict[str, Tensor]:
-        try:
-            info = {"pos_rew": self.pos_rew, "energy_rew": self.energy_rew}
-        # When reset is called before reward()
-        except AttributeError:
-            info = {}
+        info = {"pos_rew": self.pos_rew, "energy_rew": self.energy_rew}
         return info
 
     def done(self):
@@ -145,4 +144,6 @@ class Scenario(BaseScenario):
 
 
 if __name__ == "__main__":
-    render_interactively("dropout", n_agents=4, energy_coeff=DEFAULT_ENERGY_COEFF)
+    render_interactively(
+        __file__, control_two_agents=True, n_agents=4, energy_coeff=DEFAULT_ENERGY_COEFF
+    )

@@ -1,4 +1,4 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
 
@@ -39,6 +39,9 @@ class Sensor(ABC):
     def render(self, env_index: int = 0) -> "List[Geom]":
         raise NotImplementedError
 
+    def to(self, device: torch.device):
+        raise NotImplementedError
+
 
 class Lidar(Sensor):
     def __init__(
@@ -67,6 +70,9 @@ class Lidar(Sensor):
         self._entity_filter = entity_filter
         self._render_color = render_color
 
+    def to(self, device: torch.device):
+        self._angles = self._angles.to(device)
+
     @property
     def entity_filter(self):
         return self._entity_filter
@@ -82,7 +88,7 @@ class Lidar(Sensor):
         for angle in self._angles:
             dists.append(
                 self._world.cast_ray(
-                    self.agent.state.pos,
+                    self.agent,
                     angle,
                     max_range=self._max_range,
                     entity_filter=self.entity_filter,

@@ -1,10 +1,10 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
-from enum import Enum
-from typing import List, Optional, Tuple, Callable
+import random
+from ctypes import byref
+from typing import List, Tuple, Callable, Optional
 
-import gym
 import numpy as np
 import torch
 from gym import spaces
@@ -13,8 +13,8 @@ from torch import Tensor
 import vmas.simulator.utils
 from vmas.simulator.core import Agent, TorchVectorizedObject
 from vmas.simulator.scenario import BaseScenario
-from vmas.simulator.utils import VIEWER_MIN_SIZE
-from vmas.simulator.utils import X, Y, ALPHABET
+from vmas.simulator.utils import VIEWER_MIN_ZOOM
+from vmas.simulator.utils import X, Y, ALPHABET, DEVICE_TYPING, override
 
 
 # environment for all agents in the multiagent world
@@ -29,9 +29,10 @@ class Environment(TorchVectorizedObject):
         self,
         scenario: BaseScenario,
         num_envs: int = 32,
-        device: str = "cpu",
-        max_steps: int = None,
+        device: DEVICE_TYPING = "cpu",
+        max_steps: Optional[int] = None,
         continuous_actions: bool = True,
+        seed: Optional[int] = None,
         **kwargs,
     ):
 
@@ -45,19 +46,19 @@ class Environment(TorchVectorizedObject):
         self.max_steps = max_steps
         self.continuous_actions = continuous_actions
 
-        self.reset()
+        self.reset(seed=seed)
 
         # configure spaces
-        self.action_space = gym.spaces.Tuple(
+        self.action_space = spaces.Tuple(
             [self.get_action_space(agent) for agent in self.agents]
         )
-        self.observation_space = gym.spaces.Tuple(
+        self.observation_space = spaces.Tuple(
             [
                 spaces.Box(
-                    low=-float("inf"),
-                    high=float("inf"),
+                    low=-np.float32("inf"),
+                    high=np.float32("inf"),
                     shape=(len(self.scenario.observation(agent)[0]),),
-                    dtype=float,
+                    dtype=np.float32,
                 )
                 for agent in self.agents
             ]
@@ -70,12 +71,11 @@ class Environment(TorchVectorizedObject):
         self.headless = None
         self.visible_display = None
 
-    def reset(self, seed: int = None):
+    def reset(self, seed: Optional[int] = None, return_info: bool = False):
         """
         Resets the environment in a vectorized way
         Returns observations for all envs and agents
         """
-        # Seed will be none at first call of this fun from constructor
         if seed is not None:
             self.seed(seed)
         # reset world
@@ -83,13 +83,14 @@ class Environment(TorchVectorizedObject):
         self.steps = torch.zeros(self.num_envs, device=self.device)
         # record observations for each agent
         obs = []
-        infos = []
+        info = []
         for agent in self.agents:
             obs.append(self.scenario.observation(agent))
-            infos.append(self.scenario.info(agent))
-        return obs, infos
+            if return_info:
+                info.append(self.scenario.info(agent))
+        return (obs, info) if return_info else obs
 
-    def reset_at(self, index: int = None):
+    def reset_at(self, index: int, return_info: bool = False):
         """
         Resets the environment at index
         Returns observations for all agents in that environment
@@ -98,15 +99,24 @@ class Environment(TorchVectorizedObject):
         self.scenario.env_reset_world_at(index)
         self.steps[index] = 0
         obs = []
+        info = []
         for agent in self.agents:
             obs.append(self.scenario.observation(agent)[index].unsqueeze(0))
-        return obs
+            if return_info:
+                info.append(
+                    {
+                        key: val[index].unsqueeze(0)
+                        for key, val in self.scenario.info(agent).items()
+                    }
+                )
+        return (obs, info) if return_info else obs
 
     def seed(self, seed=None):
         if seed is None:
             seed = 0
         torch.manual_seed(seed)
-        self.scenario.seed()
+        np.random.seed(seed)
+        random.seed(seed)
         return [seed]
 
     def step(self, actions: List):
@@ -154,14 +164,13 @@ class Environment(TorchVectorizedObject):
         rewards = []
         infos = []
         for agent in self.agents:
-            rewards.append(self.scenario.reward(agent).clone())
-            obs.append(self.scenario.observation(agent).clone())
+            rewards.append(self.scenario.reward(agent))
+            obs.append(self.scenario.observation(agent))
             # A dictionary per agent
             infos.append(self.scenario.info(agent))
 
-        dones = self.scenario.done().clone()
-
         self.steps += 1
+        dones = self.done()
         # if self.max_steps is not None:
         #     dones += self.steps >= self.max_steps
         truncateds = self.steps >= self.max_steps
@@ -184,6 +193,12 @@ class Environment(TorchVectorizedObject):
         # print(f"Info len (n_agents): {len(infos)}, info[0] (infos agent 0): {infos[0]}")
         return obs, rewards, dones, truncateds, infos
 
+    def done(self):
+        dones = self.scenario.done()
+        if self.max_steps is not None:
+            dones += self.steps >= self.max_steps
+        return dones
+
     def get_agent_action_size(self, agent: Agent):
         return (
             self.world.dim_p
@@ -201,18 +216,20 @@ class Environment(TorchVectorizedObject):
                 low=np.array(
                     [-agent.u_range] * self.world.dim_p
                     + [-agent.u_rot_range] * (1 if agent.u_rot_range != 0 else 0)
-                    + [0.0] * (self.world.dim_c if not agent.silent else 0)
+                    + [0] * (self.world.dim_c if not agent.silent else 0),
+                    dtype=np.float32,
                 ),
                 high=np.array(
                     [agent.u_range] * self.world.dim_p
                     + [agent.u_rot_range] * (1 if agent.u_rot_range != 0 else 0)
-                    + [1.0] * (self.world.dim_c if not agent.silent else 0)
+                    + [1] * (self.world.dim_c if not agent.silent else 0),
+                    dtype=np.float32,
                 ),
                 shape=(self.get_agent_action_size(agent),),
-                dtype=float,
+                dtype=np.float32,
             )
         else:
-            if self.world.dim_c == 0 or agent.silent or agent.u_rot_range != 0:
+            if (self.world.dim_c == 0 or agent.silent) and agent.u_rot_range == 0.0:
                 return spaces.Discrete(self.world.dim_p * 2 + 1)
             else:
                 actions = (
@@ -249,7 +266,7 @@ class Environment(TorchVectorizedObject):
         action_index = 0
 
         if self.continuous_actions:
-            physical_action = action[:, action_index : self.world.dim_p]
+            physical_action = action[:, action_index : action_index + self.world.dim_p]
             action_index += self.world.dim_p
             assert not torch.any(
                 torch.abs(physical_action) > agent.u_range
@@ -393,8 +410,18 @@ class Environment(TorchVectorizedObject):
                 )
 
             try:
+                # Try to use EGL
                 pyglet.lib.load_library("EGL")
-            except ImportError:
+
+                # Only if we have GPUs
+                from pyglet.libs.egl import egl
+                from pyglet.libs.egl import eglext
+
+                num_devices = egl.EGLint()
+                eglext.eglQueryDevicesEXT(0, None, byref(num_devices))
+                assert num_devices.value > 0
+
+            except (ImportError, AssertionError):
                 self.headless = False
             pyglet.options["headless"] = self.headless
 
@@ -422,19 +449,20 @@ class Environment(TorchVectorizedObject):
                 self.viewer.text_lines[idx].set_text(message)
                 idx += 1
 
+        zoom = max(VIEWER_MIN_ZOOM, self.scenario.viewer_zoom)
+
         if aspect_ratio < 1:
-            cam_range = torch.tensor(
-                [VIEWER_MIN_SIZE, VIEWER_MIN_SIZE / aspect_ratio], device=self.device
-            )
+            cam_range = torch.tensor([zoom, zoom / aspect_ratio], device=self.device)
         else:
-            cam_range = torch.tensor(
-                [VIEWER_MIN_SIZE * aspect_ratio, VIEWER_MIN_SIZE], device=self.device
-            )
+            cam_range = torch.tensor([zoom * aspect_ratio, zoom], device=self.device)
 
         if shared_viewer:
             # zoom out to fit everyone
             all_poses = torch.stack(
                 [agent.state.pos[env_index] for agent in self.world.agents], dim=0
+            )
+            max_agent_radius = np.max(
+                [agent.shape.circumscribed_radius() for agent in self.world.agents]
             )
             viewer_size_fit = (
                 torch.stack(
@@ -443,12 +471,11 @@ class Environment(TorchVectorizedObject):
                         torch.max(torch.abs(all_poses[:, Y])),
                     ]
                 )
-                + VIEWER_MIN_SIZE
-                - 1
+                + 2 * max_agent_radius
             )
 
             viewer_size = torch.maximum(
-                viewer_size_fit / cam_range, torch.tensor(1, device=self.device)
+                viewer_size_fit / cam_range, torch.tensor(zoom, device=self.device)
             )
             cam_range *= torch.max(viewer_size)
             self.viewer.set_bounds(
@@ -535,296 +562,8 @@ class Environment(TorchVectorizedObject):
                     self.viewer.text_lines.append(text_line)
                     idx += 1
 
-
-def get_rllib_env_wrapper():
-    from ray import rllib
-    from ray.rllib.utils.typing import EnvActionType, EnvInfoDict, EnvObsType
-
-    class VectorEnvWrapper(rllib.VectorEnv):
-        """
-        Vector environment wrapper for rllib
-        """
-
-        def __init__(
-            self,
-            env: Environment,
-        ):
-            self._env = env
-            super().__init__(
-                observation_space=self._env.observation_space,
-                action_space=self._env.action_space,
-                num_envs=self._env.num_envs,
-            )
-
-        @property
-        def env(self):
-            return self._env
-
-        def vector_reset(self) -> List[EnvObsType]:
-            obs, info = self._env.reset()
-            return self._tensor_to_list(obs, self.num_envs)
-
-        def reset_at(self, index: Optional[int] = None) -> EnvObsType:
-            assert index is not None
-            obs = self._env.reset_at(index)
-            return self._tensor_to_list(obs, 1)[0]
-
-        def vector_step(
-            self, actions: List[EnvActionType]
-        ) -> Tuple[List[EnvObsType], List[float], List[bool], List[EnvInfoDict]]:
-            # saved_actions = actions
-            actions = self._action_list_to_tensor(actions)
-            obs, rews, dones, truncated, infos = self._env.step(actions)
-
-            dones_or_truncated = torch.logical_or(dones, truncated)
-            dones = dones_or_truncated.tolist()
-
-            total_rews = []
-            total_infos = []
-            obs_list = []
-            for j in range(self.num_envs):
-                obs_list.append([])
-                env_infos = {"rewards": {}}
-                total_env_rew = 0.0
-                for i, agent in enumerate(self._env.agents):
-                    obs_list[j].append(obs[i][j].cpu().numpy())
-                    total_env_rew += rews[i][j].item()
-                    env_infos["rewards"].update({i: rews[i][j].item()})
-                    env_infos.update(
-                        {agent.name: {k: v[j].tolist() for k, v in infos[i].items()}}
-                    )
-                total_infos.append(env_infos)
-                total_rews.append(total_env_rew / self._env.n_agents)  # Average reward
-
-            # print("\nStep results in wrapped environment")
-            # print(
-            #     f"Actions len (num_envs): {len(saved_actions)}, len actions[0] (n_agents): {len(saved_actions[0])},"
-            #     f" actions[0][0] (action agent 0 env 0): {saved_actions[0][0]}"
-            # )
-            # print(
-            #     f"Obs len (num_envs): {len(obs_list)}, len obs[0] (n_agents): {len(obs_list[0])},"
-            #     f" obs[0][0] (obs agent 0 env 0): {obs_list[0][0]}"
-            # )
-            # print(
-            #     f"Total rews len (num_envs): {len(total_rews)}, total_rews[0] (total rew env 0): {total_rews[0]}"
-            # )
-            # print(f"Dones len (num_envs): {len(dones)}, dones[0] (done env 0): {dones[0]}")
-            # print(
-            #     f"Total infos len (num_envs): {len(total_infos)}, total_infos[0] (infos env 0): {total_infos[0]}"
-            # )
-            return obs_list, total_rews, dones, total_infos
-
-        def seed(self, seed=None):
-            return self._env.seed(seed)
-
-        def try_render_at(
-            self,
-            index: Optional[int] = None,
-            mode="human",
-            agent_index_focus: Optional[int] = None,
-            visualize_when_rgb: bool = False,
-            plot_position_function: Callable[[Tuple[float, float]], float] = None,
-            plot_position_function_precision: float = 0.05,
-            plot_position_function_range: float = 1,
-        ) -> Optional[np.ndarray]:
-            """
-            Render function for environment using pyglet
-
-            On servers use mode="rgb_array" and set
-            ```
-            export DISPLAY=':99.0'
-            Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
-            ```
-
-            :param mode: One of human or rgb_array
-            :param index: Index of the environment to render
-            :param agent_index_focus: If specified the camera will stay on the agent with this index.
-                                      If None, the camera will stay in the center and zoom out to contain all agents
-            :param visualize_when_rgb: Also run human visualization when mode=="rgb_array"
-            :param plot_position_function: A function to plot under the rendering. This function takes
-             the position (x,y) as input and outputs a transparency alpha value
-            :param plot_position_function_precision: The precision to use for plotting the function
-            :param plot_position_function_range: The position range to plot the function in
-            :return: Rgb array or None, depending on the mode
-            """
-            if index is None:
-                index = 0
-            return self._env.render(
-                mode=mode,
-                env_index=index,
-                agent_index_focus=agent_index_focus,
-                visualize_when_rgb=visualize_when_rgb,
-                plot_position_function=plot_position_function,
-                plot_position_function_precision=plot_position_function_precision,
-                plot_position_function_range=plot_position_function_range,
-            )
-
-        def get_sub_environments(self) -> List[Environment]:
-            return [self._env]
-
-        def _action_list_to_tensor(self, list_in: List) -> List:
-            if len(list_in) == self.num_envs:
-                actions = []
-                for agent in self._env.agents:
-                    actions.append(
-                        torch.zeros(
-                            self.num_envs,
-                            self._env.get_agent_action_size(agent),
-                            device=self._env.device,
-                            dtype=torch.float32,
-                        )
-                    )
-                for j in range(self.num_envs):
-                    assert (
-                        len(list_in[j]) == self._env.n_agents
-                    ), f"Expecting actions for {self._env.n_agents} agents, got {len(list_in[j])} actions"
-                    for i in range(self._env.n_agents):
-                        act = torch.tensor(
-                            list_in[j][i], dtype=torch.float32, device=self._env.device
-                        )
-                        if len(act.shape) == 0:
-                            assert (
-                                self._env.get_agent_action_size(self._env.agents[i]) == 1
-                            ), f"Action of agent {i} in env {j} is supposed to be an scalar int"
-                        else:
-                            assert len(act.shape) == 1 and act.shape[
-                                0
-                            ] == self._env.get_agent_action_size(self._env.agents[i]), (
-                                f"Action of agent {i} in env {j} hase wrong shape: "
-                                f"expected {self._env.get_agent_action_size(self._env.agents[i])}, got {act.shape[0]}"
-                            )
-                        actions[i][j] = act
-                return actions
-            else:
-                assert False, "Input action is not in correct format"
-
-        def _tensor_to_list(self, list_in: List, num_envs: int) -> List:
-            assert (
-                len(list_in) == self._env.n_agents
-            ), f"Tensor used in output of env must be of len {self._env.n_agents}, got {len(list_in)}"
-            assert list_in[0].shape[0] == num_envs, (
-                f"Input tensor for each agent should have"
-                f" vector dim {num_envs}, but got {list_in[0].shape[0]}"
-            )
-            list_out = []
-            for j in range(num_envs):
-                list_per_env = []
-                for i in range(self._env.n_agents):
-                    list_per_env.append(list_in[i][j].cpu().numpy())
-                list_out.append(list_per_env)
-            return list_out
-
-    return VectorEnvWrapper
-
-
-class GymWrapper(gym.Env):
-    metadata = Environment.metadata
-
-    def __init__(
-        self,
-        env: Environment,
-    ):
-        assert (
-            env.num_envs == 1
-        ), f"GymEnv wrapper is not vectorised, got env.num_envs: {env.num_envs}"
-
-        self._env = env
-        self.observation_space = self._env.observation_space
-        self.action_space = self._env.action_space
-
-    def __getattr__(self, name):
-        """Returns an attribute with ``name``, unless ``name`` starts with an underscore."""
-        if name.startswith("_"):
-            raise AttributeError(f"accessing private attribute '{name}' is prohibited")
-        return getattr(self._env, name)
-
-    @property
-    def unwrapped(self) -> Environment:
-        return self._env
-
-    def step(self, action):
-        action = self._action_list_to_tensor(action)
-        obs, rews, done, truncated, info = self._env.step(action)
-        done = done[0].item()
-        for i in range(self._env.n_agents):
-            obs[i] = obs[i][0]
-            rews[i] = rews[i][0].item()
-        return obs, rews, done, truncated, info
-
-    def reset(
-        self,
-        *,
-        seed: Optional[int] = None,
-        return_info: bool = False,
-        options: Optional[dict] = None,
-    ):
-        obs = self._env.reset_at(index=0)
-        for i in range(self._env.n_agents):
-            obs[i] = obs[i][0]
-        if return_info:
-            return obs, {}
-        else:
-            return obs
-
-    def render(
-        self,
-        mode="human",
-        agent_index_focus: Optional[int] = None,
-        visualize_when_rgb: bool = False,
-        plot_position_function: Callable[[Tuple[float, float]], float] = None,
-        plot_position_function_precision: float = 0.05,
-        plot_position_function_range: float = 1,
-    ) -> Optional[np.ndarray]:
-
-        return self._env.render(
-            mode=mode,
-            env_index=0,
-            agent_index_focus=agent_index_focus,
-            visualize_when_rgb=visualize_when_rgb,
-            plot_position_function=plot_position_function,
-            plot_position_function_precision=plot_position_function_precision,
-            plot_position_function_range=plot_position_function_range,
-        )
-
-    def _action_list_to_tensor(self, list_in: List) -> List:
-        assert (
-            len(list_in) == self._env.n_agents
-        ), f"Expecting actions for {self._env.n_agents} agents, got {len(list_in)} actions"
-        actions = []
-        for agent in self._env.agents:
-            actions.append(
-                torch.zeros(
-                    1,
-                    self._env.get_agent_action_size(agent),
-                    device=self._env.device,
-                    dtype=torch.float32,
-                )
-            )
-
-        for i in range(self._env.n_agents):
-            act = torch.tensor(list_in[i], dtype=torch.float32, device=self._env.device)
-            if len(act.shape) == 0:
-                assert (
-                    self._env.get_agent_action_size(self._env.agents[i]) == 1
-                ), f"Action of agent {i} is supposed to be an scalar int"
-            else:
-                assert len(act.shape) == 1 and act.shape[
-                    0
-                ] == self._env.get_agent_action_size(self._env.agents[i]), (
-                    f"Action of agent {i} hase wrong shape: "
-                    f"expected {self._env.get_agent_action_size(self._env.agents[i])}, got {act.shape[0]}"
-                )
-            actions[i][0] = act
-        return actions
-
-
-class Wrapper(Enum):
-    RLLIB = 0
-    GYM = 1
-
-    def get_env(self, env: Environment):
-        if self is self.RLLIB:
-            vector_env_wrapper = get_rllib_env_wrapper()
-            return vector_env_wrapper(env)
-        elif self is self.GYM:
-            return GymWrapper(env)
+    @override(TorchVectorizedObject)
+    def to(self, device: DEVICE_TYPING):
+        device = torch.device(device)
+        self.scenario.to(device)
+        super().to(device)

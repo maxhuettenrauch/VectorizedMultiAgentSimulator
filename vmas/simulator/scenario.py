@@ -1,4 +1,4 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
 import typing
@@ -7,8 +7,9 @@ from typing import Dict, List
 
 import torch
 from torch import Tensor
+
 from vmas.simulator.core import World, Agent
-from vmas.simulator.utils import INITIAL_VIEWER_SIZE
+from vmas.simulator.utils import INITIAL_VIEWER_SIZE, VIEWER_MIN_ZOOM
 
 if typing.TYPE_CHECKING:
     from vmas.simulator.rendering import Geom
@@ -20,6 +21,8 @@ class BaseScenario(ABC):
         self._world = None
         # This is the viewer size and can be set in the `make_world' function
         self.viewer_size = INITIAL_VIEWER_SIZE
+        # This is the zoom level of the rendering
+        self.viewer_zoom = VIEWER_MIN_ZOOM
         # Whether to plot a grid in the scenario background
         self.plot_grid = False
         # The distance between lines in the background grid
@@ -33,20 +36,19 @@ class BaseScenario(ABC):
         ), "You first need to set `self._world` in the `make_world` method"
         return self._world
 
-    def seed(self, seed: int = None):
+    def to(self, device: torch.device):
         """Do not override"""
-        if seed is None:
-            seed = 0
-        torch.manual_seed(seed)
-        self.world.seed()
-        return [seed]
+        for attr, value in self.__dict__.items():
+            if isinstance(value, Tensor):
+                self.__dict__[attr] = value.to(device)
+        self.world.to(device)
 
     def env_make_world(self, batch_dim: int, device: torch.device, **kwargs) -> World:
         """Do not override"""
         self._world = self.make_world(batch_dim, device, **kwargs)
         return self._world
 
-    def env_reset_world_at(self, env_index: int):
+    def env_reset_world_at(self, env_index: typing.Optional[int]):
         """Do not override"""
         self.world.reset(env_index)
         self.reset_world_at(env_index)
