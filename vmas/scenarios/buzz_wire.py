@@ -305,4 +305,4 @@ class Scenario(BaseScenario):
 
 
 if __name__ == "__main__":
-    render_interactively(__file__, control_two_agents=True)
+    render_interactively(__file__, control_two_agents=True, max_steps=500)
